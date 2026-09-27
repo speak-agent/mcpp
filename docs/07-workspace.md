@@ -133,6 +133,13 @@ A member can override an inherited version:
 mbedtls = "4.0.0"          # override; does not use the workspace version
 ```
 
+An entry that says `.workspace = true` and that no workspace resolves is
+refused wherever the package enters a build (the root, a member selected with
+`-p`, a `path`, `git` or index dependency), naming the table and the entry
+(mcpp 2026.9.27.1+). It is resolved against the `[workspace.dependencies]` of
+the workspace whose `members` list the package; a workspace root that carries
+its own `[package]` resolves its own entries the same way.
+
 ## 4. Inheriting Toolchain and Build Configuration
 
 The workspace root's `[toolchain]` and `[target.<triple>]` settings are automatically inherited by all members. A member can override them in its own project file.
@@ -160,6 +167,22 @@ linkage   = "static"
 [toolchain]
 default = "llvm@20.1.7"
 ```
+
+`[toolchain]`, `[target.<triple>]` and `[indices]` choose the compiler, the
+target rows and the indices for a whole graph, so a member takes them from the
+workspace root only where it is the root of a build: built from the workspace,
+with `-p`, or as a host tool of another package (mcpp 2026.9.27.1+ for the
+last). A member reached as a dependency takes them from that build's root.
+
+A build without `--target` targets the host, and `[target.<host-triple>]`
+applies to it as `--target <host-triple>` would (mcpp 2026.9.27.1+).
+
+The root's `[xlings.workspace]` entries, including its
+`[target.<selector>.xlings.workspace]` rows, are inherited implicitly as well
+(mcpp 2026.9.27.1+): a payload describes the environment a build runs in, like
+`[toolchain]`, so no opt-in is needed. A member's own declaration of the same
+package wins. `[feature-xlings.<f>]` entries are not inherited, because a
+feature belongs to the package that declares it.
 
 ### 4.1 `[workspace.package]` and `[workspace.build]`
 

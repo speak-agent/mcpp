@@ -136,6 +136,11 @@ gtest.workspace = true      # 继承版本 → "1.15.2"
 mbedtls = "4.0.0"          # override; does not use the workspace version
 ```
 
+写了 `.workspace = true` 而没有工作空间解析它的条目，在该包进入构建的每个位置（根包、
+`-p` 选中的成员、`path`、`git` 与索引依赖）都被拒绝，消息点名所在的表与条目
+（mcpp 2026.9.27.1+）。它按 `members` 列出该包的工作空间的 `[workspace.dependencies]`
+解析；带自己 `[package]` 的工作空间根以同样方式解析自己的条目。
+
 ## 4. 工具链与构建配置的继承
 
 工作空间根的 `[toolchain]` 与 `[target.<triple>]` 配置由全体成员自动继承。成员
@@ -164,6 +169,19 @@ linkage   = "static"
 [toolchain]
 default = "llvm@20.1.7"
 ```
+
+`[toolchain]`、`[target.<triple>]` 与 `[indices]` 为整个依赖图选择编译器、目标行与索引，
+因此成员只在作为一次构建的根时从工作空间根继承它们：从工作空间构建、以 `-p` 选中，或作为
+另一个包的宿主工具构建（最后一种自 mcpp 2026.9.27.1）。作为依赖到达的成员从该次构建的根
+取得它们。
+
+不带 `--target` 的构建以宿主为目标，`[target.<宿主三元组>]` 对它生效，与
+`--target <宿主三元组>` 相同（mcpp 2026.9.27.1+）。
+
+根的 `[xlings.workspace]` 条目，包括 `[target.<selector>.xlings.workspace]` 行，同样隐式
+继承（mcpp 2026.9.27.1+）：载荷描述的是构建运行的环境，与 `[toolchain]` 相同，不需要
+显式声明。成员自己声明的同一个包优先。`[feature-xlings.<f>]` 不被继承，因为特性属于声明
+它的包。
 
 ### 4.1 `[workspace.package]` 与 `[workspace.build]`
 

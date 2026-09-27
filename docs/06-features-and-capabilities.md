@@ -94,7 +94,7 @@ simd       = { sources = ["src/simd/**"], flags = [
 ```
 
 - **The table form accepts exactly** `implies`, `forward`, `defines`, `sources`,
-  `flags`, `requires`, `provides`. Anything else is reported as a schema warning
+  `flags`, `requires`, `provides`, `tools`. Anything else is reported as a schema warning
   and ignored (mcpp 2026.9.1.1+); `deps` is reported separately as reserved and
   points at `[feature-deps.<name>]`. Before that release `[features]` was
   the one structured section with no schema check at all, so a misplaced
@@ -120,6 +120,11 @@ simd       = { sources = ["src/simd/**"], flags = [
   feature `flags` are **private per-TU build flags** — they never propagate to
   consumers (same contract as `[build].flags`), so they stay inside the additive
   model: scoped by glob, deterministic order, no cross-package effect.
+- `tools` (mcpp 2026.9.27.1+) names `bin` targets of this package that the
+  feature needs on the build machine. A consumer that enables the feature
+  receives them as if its dependency edge had written `tools = [...]`
+  ([05, build-time dependencies](05-dependencies.md)); a name that is not a
+  `bin` target of the package is refused at load.
 
 
 ### A feature that is a build rule (mcpp 2026.9.7.1+)

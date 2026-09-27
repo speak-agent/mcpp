@@ -368,6 +368,12 @@ store 内部结构 —— 与 `dep_dir` 存在的理由相同。
 (2026.9.6.6+)。在那之前整个版本位是拿去与目录名比对的，于是一条范围装上了载荷，然后
 回答「没装」—— 这正是规则包无法声明下界、而每个工程都要把规则的包列表重写一遍的原因。
 
+**答案是 xlings 装下的那个载荷**(2026.9.27.1+)。xlings 报告每条地址解析到的载荷，
+`xpkg_dir` 先读这份记录。没有记录时，按 xlings 的版本文法在已安装的版本目录中选择：一至两段
+的裸版本是前缀范围，三段及以上须按书写部分逐段相等，因此 `libglvnd@1.7` 回答 `1.7.0.1`。
+此前 `1.7` 按 Cargo 文法读取，看不到四段的目录，对磁盘上的载荷回答 `""`。一个声明过、安装
+之后又被删除的载荷会被重新安装，离线时被拒绝，而不是回答 `""`（SPEC-001 §10.1）。
+
 **依赖声明的包同样被作答**(2026.9.6.6+)，而且答的是这次构建**真正装上**的版本，不是
 本地 manifest 写下的那个。一个包只有一个版本：工程与规则都命名它时，离产物更近的声明赢，
 而两侧被告知同一个答案。见 [23 — The Project Environment](23-the-project-environment.md) 的「一个包一个版本」。
@@ -576,6 +582,41 @@ a.output(gen.c_str()).provides("my.generated").imports("std").submit();
 mcpp 会播下一个带着该声明的占位文件，使 prepare 期的扫描与生成器将要产出的
 内容一致 —— 与 `[modules].scan_overrides` 同一条「声明 + 验证」的取舍，build 期由
 编译器自己的 P1689 输出复核。
+
+#### 环境变量与工作目录：`env` / `cwd`（protocol 13）
+
+action 的命令是 argv，不是 shell 命令行，因此 `NAME=value cmd` 与 `cd dir && cmd` 对它
+不可用。一个由环境变量配置、或必须在某个目录中运行的生成器，在 action 上陈述两者：
+
+```cpp
+mcpp::action a;
+a.id   = "gen";
+a.role = mcpp::roles::source;
+a.env("GEN_MODE", "release")
+ .cwd("tools")                       // 相对于包根
+ .arg("./gen").arg(out.c_str())
+ .output(out.c_str())
+ .submit();
+```
+
+引擎的 action 包装器在运行命令之前设置它们。声明的输入、输出与 stamp 在生成计划时解析，
+不随 `cwd` 移动；命令自己的参数原样传递，其中的相对路径相对于 `cwd`。变量的值属于这条边的
+命令行，值改变时该 action 重新运行。两者都未声明的 action，其命令行与 protocol 12 逐字节
+相同。
+
+#### action 中的依赖程序：`${mcpp.artifact:}`(2026.9.27.1+)
+
+带 `artifacts = ["<bin>"]` 的依赖边为消费方的目标构建该程序（[05](05-dependencies.md)）。
+action 以 `${mcpp.artifact:<依赖>/<bin>}` 在参数与输入中引用它：
+
+```cpp
+a.arg("cp").arg("${mcpp.artifact:updater/updater}").arg(out.c_str())
+ .input("${mcpp.artifact:updater/updater}")
+ .output(out.c_str())
+ .submit();
+```
+
+占位符不对应任何 `artifacts` 条目时，规划失败，错误中点名该占位符。
 
 ### 部署程序生成的东西：`deploy`（2026.9.12.3+,protocol 11）
 

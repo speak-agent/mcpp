@@ -426,6 +426,16 @@ position was compared against a directory name, so a range installed a payload
 and then answered that nothing was installed — which is why a rule package
 could not state a floor and every project repeated its rule's package list.
 
+**The answer is the payload xlings installed** *(2026.9.27.1+)*. xlings reports
+what each address resolved to, and `xpkg_dir` answers from that record first.
+Without one, it selects among the installed version directories by the xlings
+version grammar: a bare version of one or two segments is a prefix range, three
+or more segments must match as written, so `libglvnd@1.7` answers `1.7.0.1`.
+Before this release the Cargo reading of `1.7` could not see a four-segment
+directory, and the answer was `""` for a payload on disk. A declared payload
+that was removed after it was installed is installed again, or refused
+offline, instead of answering `""` (SPEC-001 §10.1).
+
 **A package a DEPENDENCY declared is answered too** *(2026.9.6.6+)*, at the
 version this build actually installed rather than the one the local manifest
 wrote. One package means one version: where a project and a rule both name it,
@@ -684,6 +694,47 @@ mcpp seeds a placeholder carrying exactly that declaration so the prepare-time
 scan agrees with what the generator will emit — the same assertion-plus-
 verification trade `[modules].scan_overrides` makes, and the compiler's own
 P1689 output checks it at build time.
+
+#### Environment and working directory: `env` / `cwd` (protocol 13)
+
+An action's command is an argv, not a shell line, so `NAME=value cmd` and
+`cd dir && cmd` are not available to it. A generator configured through
+environment variables, or one that must run in a particular directory, states
+both on the action:
+
+```cpp
+mcpp::action a;
+a.id   = "gen";
+a.role = mcpp::roles::source;
+a.env("GEN_MODE", "release")
+ .cwd("tools")                       // relative to the package root
+ .arg("./gen").arg(out.c_str())
+ .output(out.c_str())
+ .submit();
+```
+
+The engine's action wrapper sets them before it runs the command. Declared
+inputs, outputs and the stamp are resolved when the plan is made and do not
+move with `cwd`; the command's own arguments are passed unchanged, so a
+relative path among them is relative to `cwd`. A variable's value is part of
+the edge's command line, and changing it re-runs the action. An action that
+declares neither keeps the protocol 12 command line byte for byte.
+
+#### A dependency's program in an action: `${mcpp.artifact:}` (2026.9.27.1+)
+
+A dependency edge with `artifacts = ["<bin>"]` builds that program for the
+consumer's target ([05](05-dependencies.md)). An action names it with
+`${mcpp.artifact:<dependency>/<bin>}`, in its arguments and its inputs:
+
+```cpp
+a.arg("cp").arg("${mcpp.artifact:updater/updater}").arg(out.c_str())
+ .input("${mcpp.artifact:updater/updater}")
+ .output(out.c_str())
+ .submit();
+```
+
+A placeholder that names no `artifacts` entry fails planning and is named in the
+error.
 
 ### Deploying what the program generated: `deploy` (2026.9.12.3+, protocol 11)
 

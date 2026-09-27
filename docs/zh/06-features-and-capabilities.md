@@ -85,7 +85,7 @@ simd       = { sources = ["src/simd/**"], flags = [
 ```
 
 - **表形式恰好接受** `implies`、`forward`、`defines`、`sources`、`flags`、
-  `requires`、`provides`。其余键会被报为一条 schema warning 并忽略
+  `requires`、`provides`、`tools`。其余键会被报为一条 schema warning 并忽略
   (mcpp 2026.9.1.1+);`deps` 单独报为"保留"，并指向 `[feature-deps.<name>]`。
   该版本之前，`[features]` 是唯一一个完全没有 schema 检查的结构化段落 ——
   把 `include_dirs` 误写进 feature 里会零诊断地构建成功，而同样的错误写在
@@ -108,6 +108,9 @@ simd       = { sources = ["src/simd/**"], flags = [
   与 `defines` 不同，feature 的 `flags` 是**私有的、per-TU 的构建旗标**——它们
   从不传播给消费方（与 `[build].flags` 同一契约），因此不破坏可加模型：由 glob
   限定作用面，顺序确定，没有跨包效应。
+- `tools`（mcpp 2026.9.27.1+）指名该 feature 需要在构建机器上运行的本包 `bin` 目标。
+  启用该 feature 的消费方得到这些工具，与其依赖边上写了 `tools = [...]` 相同
+  （[05，构建期依赖](05-dependencies.md)）；指名的不是本包的 `bin` 目标时，加载被拒绝。
 
 
 ### 作为构建规则的 feature(mcpp 2026.9.7.1+)

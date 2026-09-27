@@ -5,8 +5,8 @@
 | **规范编号** | SPEC-004 |
 | **标题** | `mcpp.toml` 的平面划分、条件化形状、解析轴与命名规约 |
 | **状态** | **草案(Draft)** |
-| **版本** | 1.7 |
-| **最后修改** | 2026-09-26 |
+| **版本** | 1.8 |
+| **最后修改** | 2026-09-27 |
 | **最低实现版本** | 条件化形状:mcpp **2026.8.29.1**(`[target.<selector>.build-dependencies]` 起齐备);目标轴:mcpp **2026.9.6.4** |
 | **作者/维护** | mcpp-community |
 | **相关设计文档** | `.agents/docs/2026-09-07-mcpp-toml-unified-semantics-design.md`<br>`.agents/docs/2026-06-04-manifest-schema-ownership.md`<br>`.agents/docs/2026-09-03-xlings-workspace-as-the-one-table.md`<br>`.agents/docs/2026-09-25-issue-690-workspace-build-inheritance-consistency.md` |
@@ -263,7 +263,21 @@ feature-deps          feature-xlings         ← 限定词是门
 版本,`>=2099.1` 被拒绝。实现**必须**让 `mcpp::xpkg_dir` 回答范围——安装了却答「不
 存在」,是让规则包无法声明下界的那个缺口。
 
-**状态:已实现**(2026.9.6.6)。
+`xpkg_dir` 对一条地址的回答**必须**是 xlings 为它安装的那个载荷:先取 xlings 报告的
+解析结果,没有时按 xlings 的版本文法在已安装的版本目录中选择(SPEC-001 §10.1)。
+`libglvnd@1.7` 因此回答 `1.7.0.1`。
+
+**状态:已实现**(2026.9.6.6;按 xlings 文法回答自 2026.9.27.1,mcpp#712)。
+
+### 4.6 宿主构建读取宿主三元组的行
+
+不带 `--target` 的构建以宿主为目标。`[target.<宿主三元组>]` 对它的描述与对任何其他目标
+的描述相同,**必须**被应用:`toolchain`、`linkage`、`cxx_runtime` 等键的效果与
+`--target <宿主三元组>` 相同。行的查找与 `--target` 使用同一个与拼写无关的比较,
+`x86_64-unknown-linux-gnu` 找到 `[target.x86_64-linux-gnu]`。命令行的 `--toolchain`
+(`MCPP_TOOLCHAIN`)仍优先于行的 `toolchain`。
+
+**状态:已实现**(mcpp 2026.9.27.1,mcpp#704)。
 
 ## 5. 命名规约
 
@@ -357,6 +371,22 @@ feature-deps          feature-xlings         ← 限定词是门
     `-Wl,-rpath,$ORIGIN/../lib` 原样到达程序的运行路径,不出现 `/../lib`;依赖传播的同一
     元素同样原样到达;含空格的 `link_search` 目录是一个参数
     (`tests/e2e/795_a_link_flag_reaches_the_linker_as_written.sh`)。
+16. §4.5 按 xlings 文法回答的判据:xlings 发布的版本选择向量在 mcpp 的实现上逐条得到相同
+    结果(`modules/versioning/tests/data/semver-vectors.tsv`,
+    `modules/versioning/tests/test_xpkg_version.cpp`);`libglvnd@1.7` 在只装有 `1.7.0.1`
+    时回答该目录(`tests/unit/test_freestanding.cpp`)。
+17. §4.6 的判据**必须**带对照腿:没有行时默认构建自包含,写了宿主行
+    `cxx_runtime = "toolchain-coupled"` 后普通构建需要 `libstdc++.so.6`,行以另一种拼写
+    书写时同样生效(`tests/e2e/802_a_host_build_applies_its_host_row.sh`)。
+18. §9 第 8 至 10 条的判据:成员得到根的条目与条件行,自己声明的同一个包保留自己的地址;
+    未解析的 `workspace = true` 在三张依赖表中都被点名拒绝;成员工具的工具链取工作空间的
+    `[toolchain]`,自己声明时取自己的(`tests/unit/test_workspace_inheritance.cpp`)。
+19. §10.2 的判据**必须**两个方向都跑:只写 `features = ["codegen"]` 的消费方得到工具并编译
+    它生成的源,不启用该特性的消费方什么都不构建;`tools` 指名非 `bin` 目标时加载被拒绝
+    (`tests/e2e/800_a_feature_provides_its_host_tools.sh`)。
+20. §10.3 的判据:程序构建到 `bin/` 并可运行,依赖的代码不在消费方中,占位符到达 action,
+    `mcpp pack` 的归档含该程序;有 musl 工具链时,`--target x86_64-linux-musl` 下它为目标构建
+    (`tests/e2e/801_a_dependency_program_is_shipped_with_the_consumer.sh`)。
 
 ## 8. flag 列表的元素
 
@@ -421,8 +451,61 @@ mcpp 2026.9.26.2,#703)。**
    全部输入。
 7. 工作空间成员的发布形态**必须**自包含:发布的清单写出继承来的值,兄弟成员之间的
    `path` 边以版本边发布,无法以版本表达的 `path` 边**必须**被拒绝发布。
+8. 成员**必须**继承工作空间根的 `[xlings.workspace]` 条目,包括
+   `[target.<selector>.xlings.workspace]` 的条件行(按行继承,合并时由选择器决定)。继承是
+   隐式的,与 `[toolchain]` 相同,因为载荷描述的是构建运行的环境,不是依赖图的边。成员自己
+   声明的同一个包(身份为 `(namespace, name)`)优先。`[feature-xlings.<f>]` 不被继承:特性
+   属于声明它的包。
+9. 一条 `x.workspace = true` 条目在继承之后仍未解析时,实现**必须**在它进入构建的每个位置
+   (根包、`-p` 选中的成员、`path` 与 `git` 依赖、索引依赖)拒绝它,并点名条目所在的表与
+   名称。带 `[package]` 的工作空间根按它自己的 `[workspace.dependencies]` 解析自己的
+   `workspace = true` 条目。
+10. `[toolchain]`、`[target.<triple>]` 与 `[indices]` 是根位置的键:它们为整个依赖图选择
+    编译器、目标行与索引,因此只在成员作为一次构建的根时继承。作为宿主工具构建的成员是其
+    子构建的根,同样继承这三项(§10.1)。
 
-**状态:已实现(mcpp 2026.9.25.1)。**
+**状态:已实现(第 1 至 7 条 mcpp 2026.9.25.1;第 8 至 10 条 mcpp 2026.9.27.1,mcpp#713、
+#714、#710)。**
+
+## 10. 依赖的程序
+
+一条依赖边可以取得依赖包的 `bin` 目标,而不链接它的代码。取得的方式由边决定,因为程序
+在哪台机器上运行决定了它为哪个目标构建。
+
+### 10.1 `tools`:在构建机器上运行的程序
+
+`x = { ..., tools = ["<bin>"] }` 取得依赖为构建机器构建的程序:它在一次嵌套的子构建中构建,
+发布到全局工具库,构建程序以 `mcpp::dep_bin("<x>", "<bin>")` 取得路径。
+
+- 子构建的工具链由请求它的构建决定一次:`--toolchain`(`MCPP_TOOLCHAIN`)优先;否则取
+  工具包自己的声明——应用它所在工作空间的根位置键(§9 第 10 条)之后,先宿主行的
+  `toolchain`,再 `[toolchain]`;都没有时取请求方为构建程序使用的宿主工具链。决定的结果
+  传给子构建,并写入工具库的键,因此键与产物不会不一致。
+- 工具库键中的源树摘要不包含带有自己 `mcpp.toml` 的子目录:工作空间根作为工具包时,其成员
+  的改动不使工具重建。
+
+**状态:已实现**(mcpp#355;工具链的决定与源树摘要自 mcpp 2026.9.27.1,mcpp#710、#705)。
+
+### 10.2 特性的 `tools`
+
+`[features.<f>] tools = ["<bin>"]` 陈述启用特性 `f` 需要本包的程序 `<bin>` 在构建机器上
+运行。启用该特性的依赖边,等同于在边上写了 `tools = ["<bin>"]`;不启用时不构建。条目
+**必须**指名本包的一个 `bin` 目标,否则清单在加载时被拒绝,消息列出本包的 `bin` 目标。
+
+**状态:已实现**(mcpp 2026.9.27.1,mcpp#709)。
+
+### 10.3 `artifacts`:随消费方发布的程序
+
+`x = { ..., artifacts = ["<bin>"] }` 取得依赖的 `bin` 目标,以**消费方**的目标与 profile
+构建,作为消费方计划中的一个链接单元,输出到消费方的 `bin/`。
+
+- 只经 `artifacts` 边到达的包的代码不链接进消费方;同一个包另经普通边到达时照常链接。
+- 构建程序的 action 以 `${mcpp.artifact:<x>/<bin>}` 引用该程序的路径,可用于命令与输入;
+  名称不对应一个 `artifacts` 条目时,规划失败并点名该占位符。
+- `mcpp run` 不选择该程序;`mcpp pack` 把它放在消费方程序旁。
+- 交叉构建(`--target`)中该程序为目标构建,与 `tools` 为构建机器构建相对。
+
+**状态:已实现**(mcpp 2026.9.27.1,mcpp#711)。
 
 ## 变更记录
 
@@ -436,3 +519,4 @@ mcpp 2026.9.26.2,#703)。**
 | 1.5 | 2026-09-17 | 编译 flag 列表元素的读法(mcpp 2026.9.17.1,#655):新增 §8 与 §7 第 10 条判据。 |
 | 1.6 | 2026-09-25 | 工作空间继承与构建需求的作用域(mcpp 2026.9.25.1,#690):§8 补 `defines` 的集合语义;新增 §9 与 §7 第 11 至 14 条判据。 |
 | 1.7 | 2026-09-26 | §8 的读法扩展到 `ldflags` 与构建程序的链接指令(mcpp 2026.9.26.2,#703):`$ORIGIN` 原样到达链接器;§7 补第 15 条判据。 |
+| 1.8 | 2026-09-27 | mcpp 2026.9.27.1:§4.5 的版本位按 xlings 文法回答(#712);新增 §4.6 宿主构建读取宿主三元组的行(#704);§9 补第 8 至 10 条(#713、#714、#710);新增 §10 依赖的程序:`tools`、特性的 `tools`、`artifacts`(#709、#711);§7 补第 16 至 20 条判据。 |

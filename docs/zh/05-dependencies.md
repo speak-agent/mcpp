@@ -415,6 +415,55 @@ spike.installer = { path = "../installer", tools = ["installer"] }
 会加到这一行当前生效的声明上。重述若写了另一个源，会被拒绝，并列出两个源
 (mcpp 2026.9.16.1+)；该版本之前它会被忽略。
 
+**哪个编译器构建工具（mcpp 2026.9.27.1+）。** 请求工具的构建只决定一次它的工具链：
+给出 `--toolchain` 时用它；否则取工具包自己的声明，按它自己的构建读取的方式读取（工作空间
+成员先应用工作空间根的 `[toolchain]`、`[target.<triple>]` 与 `[indices]`），宿主行的
+`toolchain` 先于 `[toolchain]`；都没有时取请求方编译构建程序所用的宿主工具链。这个决定
+传给工具的子构建，并写入工具库的键，因此在工作空间中 `mcpp build -p <tool>` 与为消费方
+构建同一个工具使用同一个编译器。工具包的源树摘要跳过带有自己 `mcpp.toml` 的目录，修改
+工作空间的成员不会使工作空间根提供的工具重建。
+
+### 特性提供本包的工具（mcpp 2026.9.27.1+）
+
+一个包的某个特性需要本包的程序在构建机器上运行时，在特性上陈述，消费方只写特性：
+
+```toml
+# 工具包
+[features.codegen]
+tools = ["codegen"]
+
+[targets.codegen]
+kind = "bin"
+main = "src/codegen.cpp"
+```
+
+```toml
+# 消费方
+[dependencies]
+toolpkg = { path = "../toolpkg", features = ["codegen"] }
+```
+
+启用该特性等同于在边上写 `tools = ["codegen"]`：程序为宿主构建，
+`mcpp::dep_bin("toolpkg", "codegen")` 给出它的路径。不启用该特性的消费方什么都不构建。
+条目指名的不是本包的 `bin` 目标时，清单在加载时被拒绝，消息列出本包的 `bin` 目标。
+
+### 随消费方发布的依赖程序：`artifacts`（mcpp 2026.9.27.1+）
+
+`tools` 为运行构建的机器构建程序。随消费方发布、在消费方的目标上运行的程序（更新器、
+辅助进程）用 `artifacts` 请求：
+
+```toml
+[dependencies]
+updater = { path = "../updater", artifacts = ["updater"] }
+```
+
+- 依赖的 `bin` 目标以消费方的目标与 profile 构建，作为消费方计划中的一个链接单元，输出到
+  消费方的 `bin/`。在 `--target x86_64-linux-musl` 下它是 musl 程序。
+- 这条边不把依赖的任何代码链接进消费方。同一个包另经普通边到达时照常链接。
+- 消费方构建程序的 action 以 `${mcpp.artifact:updater/updater}` 在参数与输入中引用该程序；
+  名称不对应任何 `artifacts` 条目时，规划失败并点名该占位符。
+- `mcpp run` 不选择它，`mcpp pack` 把它放在消费方程序旁。
+
 > 这个段很早就能被解析，而直到 2026.8.29.1，没有任何做决定的代码读过它：
 > 写下它得到的是一份能加载的 manifest、零诊断、零效果。
 

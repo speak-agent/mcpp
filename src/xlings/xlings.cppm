@@ -966,13 +966,11 @@ XpkgRef parse_xpkg_ref(std::string_view spec) {
 // reading of `1.7` could not see a four-segment directory at all, so
 // `mcpp::xpkg_dir` answered "" for a payload that was on disk.
 //
-// A literal directory is tried first for every spelling: an installed version
-// whose name does not parse -- `8.0.RC1` is a real one -- is addressable only
-// that way. After that the request selects among the installed directories
-// exactly as xlings would among index keys: a bare version of three or more
-// segments is written-prefix equality (1.8.12 matches 1.8.12.x and never
-// 1.9.0), one or two segments are a prefix range, operators are ranges. With
-// no version the highest installed one is taken, ordered by the same grammar.
+// The request selects among the installed directories exactly as xlings would
+// among index keys (`select_installed`): a literal name first, then a bare
+// version of three or more segments as written-prefix equality (1.8.12 matches
+// 1.8.12.x and never 1.9.0), one or two segments as a prefix range, operators
+// as ranges; with no version, the highest installed one.
 std::optional<std::filesystem::path>
 xpkg_payload(const Env& env, const XpkgRef& ref) {
     if (auto recorded = recorded_payload(env, ref)) return recorded;
@@ -984,21 +982,11 @@ xpkg_payload_at(const std::filesystem::path& xpkgsBase, const XpkgRef& ref) {
     if (ref.name.empty()) return std::nullopt;
     const auto root = xpkgsBase / std::format("{}-x-{}", ref.ns, ref.name);
     std::error_code ec;
-    if (!ref.version.empty()) {
-        auto p = root / ref.version;
-        if (std::filesystem::is_directory(p, ec)) return p;
-    }
     if (!std::filesystem::is_directory(root, ec)) return std::nullopt;
     std::vector<std::string> installed;
     for (auto const& e : std::filesystem::directory_iterator(root, ec))
         if (e.is_directory(ec)) installed.push_back(e.path().filename().string());
-    std::optional<std::string> pick;
-    if (!ref.version.empty()) {
-        pick = mcpp::xpkg_version::select_best(installed, ref.version);
-    } else {
-        for (auto const& k : installed)
-            if (!pick || mcpp::xpkg_version::compare_keys(k, *pick) > 0) pick = k;
-    }
+    auto pick = mcpp::xpkg_version::select_installed(installed, ref.version);
     if (!pick) return std::nullopt;
     return root / *pick;
 }

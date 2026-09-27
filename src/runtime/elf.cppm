@@ -334,6 +334,21 @@ std::optional<std::uint32_t> copy_relocation_type(std::uint16_t machine) {
 struct Reader {
     std::vector<unsigned char> bytes;
 
+    // Reads the whole file with one sized read. Filling the vector through
+    // an istreambuf_iterator grows it a byte at a time, which made the
+    // post-link loader check of a test run cost seconds per program.
+    bool load(const std::filesystem::path& file) {
+        std::ifstream input(file, std::ios::binary | std::ios::ate);
+        if (!input) return false;
+        const auto size = input.tellg();
+        if (size < 0) return false;
+        bytes.resize(static_cast<std::size_t>(size));
+        input.seekg(0);
+        if (size == 0) return true;
+        return static_cast<bool>(input.read(
+            reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size)));
+    }
+
     bool range(std::uint64_t off, std::uint64_t size) const {
         return off <= bytes.size() && size <= bytes.size() - off;
     }
@@ -633,10 +648,8 @@ std::optional<std::uint64_t> dynsym_count_from_gnu_hash(
 std::expected<DynamicSymbols, std::string>
 inspect_dynamic_symbols(const std::filesystem::path& object) {
     detail::Reader reader;
-    std::ifstream input(object, std::ios::binary);
-    if (!input) return std::unexpected(std::format(
+    if (!reader.load(object)) return std::unexpected(std::format(
         "cannot open ELF object '{}'", object.string()));
-    reader.bytes.assign(std::istreambuf_iterator<char>(input), {});
 
     if (reader.bytes.size() < 0x40
         || reader.bytes[0] != 0x7f || reader.bytes[1] != 'E'
@@ -795,10 +808,8 @@ inspect_dynamic_symbols(const std::filesystem::path& object) {
 std::expected<std::vector<std::string>, std::string>
 defined_object_symbols(const std::filesystem::path& object) {
     detail::Reader reader;
-    std::ifstream input(object, std::ios::binary);
-    if (!input) return std::unexpected(std::format(
+    if (!reader.load(object)) return std::unexpected(std::format(
         "cannot open ELF object '{}'", object.string()));
-    reader.bytes.assign(std::istreambuf_iterator<char>(input), {});
 
     if (reader.bytes.size() < 0x40
         || reader.bytes[0] != 0x7f || reader.bytes[1] != 'E'
@@ -862,10 +873,8 @@ defined_object_symbols(const std::filesystem::path& object) {
 std::expected<ElfRuntimeFacts, std::string>
 inspect_elf_runtime(const std::filesystem::path& artifact) {
     detail::Reader reader;
-    std::ifstream input(artifact, std::ios::binary);
-    if (!input) return std::unexpected(std::format(
+    if (!reader.load(artifact)) return std::unexpected(std::format(
         "cannot open ELF artifact '{}'", artifact.string()));
-    reader.bytes.assign(std::istreambuf_iterator<char>(input), {});
 
     if (reader.bytes.size() < 0x40
         || reader.bytes[0] != 0x7f || reader.bytes[1] != 'E'

@@ -1692,6 +1692,7 @@ kind = "bin"
 |---|---|---|
 | 源文件 | `src/**/*.{cppm,cpp,cc,c,S,s,asm}` | 自动递归扫描 |
 | 入口点 | `src/main.cpp` | 这个文件存在时，会推断出一个 `bin` 目标 |
+| 库目标 | `src/` 下的模块接口 | 没有 `[targets]` 表且没有 `src/main.cpp` 时推断；`[build] sources = []` 陈述默认构建不编译任何源，因此不推断库目标（2026.9.27.1+） |
 | 库根 | `src/<包名的最后一段>.cppm` | 用 `[lib].path` 覆盖 |
 | C++ 标准 | `c++23` | 用 `[package].standard` 配置；支持 `c++20` / `c++26` / `c++2a` / `c++2c` / `gnu++NN` / `c++latest` / `c++fly`（实验性试验场） |
 | C 标准 | `c11` | `.c` 文件自动经由 C 编译器处理 |

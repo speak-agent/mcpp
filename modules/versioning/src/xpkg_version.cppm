@@ -85,6 +85,15 @@ int compare_keys(std::string_view a, std::string_view b);
 std::optional<std::string>
 select_best(std::span<const std::string> available, std::string_view request);
 
+// The installed version an address resolves to, by the rule xlings selects
+// with: a key equal to `request` first (a version whose name does not parse,
+// `8.0.RC1`, is addressable only that way), then `select_best`; an empty
+// request takes the highest key by `compare_keys`. nullopt when none is
+// selected. The conformance vectors xlings publishes are stated against this
+// function (tests/data/semver-vectors.tsv).
+std::optional<std::string>
+select_installed(std::span<const std::string> installed, std::string_view request);
+
 } // namespace mcpp::xpkg_version
 
 namespace mcpp::xpkg_version {
@@ -319,6 +328,19 @@ select_best(std::span<const std::string> available, std::string_view request) {
         if (!v || !satisfies(*v, *range)) continue;
         if (!best || compare_keys(key, *best) > 0) best = key;
     }
+    return best;
+}
+
+std::optional<std::string>
+select_installed(std::span<const std::string> installed, std::string_view request) {
+    if (!request.empty()) {
+        if (std::ranges::find(installed, request) != installed.end())
+            return std::string(request);
+        return select_best(installed, request);
+    }
+    std::optional<std::string> best;
+    for (auto const& key : installed)
+        if (!best || compare_keys(key, *best) > 0) best = key;
     return best;
 }
 

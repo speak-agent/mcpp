@@ -448,6 +448,67 @@ and refused, and the refusal says to restate the source. `tools`, `features`,
 effect on the row. A restatement that names another source is refused, naming
 both sources (mcpp 2026.9.16.1+); before that release it was ignored.
 
+**Which compiler builds a tool (mcpp 2026.9.27.1+).** The build that requests
+a tool decides its toolchain once: `--toolchain` when given; otherwise the tool
+package's own declaration, read as its own build reads it (for a workspace
+member, after the workspace root's `[toolchain]`, `[target.<triple>]` and
+`[indices]`), its host row's `toolchain` before `[toolchain]`; otherwise the
+host toolchain the requesting build compiles its build programs with. The
+choice is passed to the tool's sub-build and recorded in the tool store key, so
+`mcpp build -p <tool>` in the workspace and the same tool built for a consumer
+use the same compiler. The source digest of a tool package skips directories
+that hold their own `mcpp.toml`, so editing a workspace member does not rebuild
+a tool the workspace root provides.
+
+### A feature that provides the package's tools (mcpp 2026.9.27.1+)
+
+A package whose feature needs one of its own programs on the build machine
+states it on the feature, and a consumer names only the feature:
+
+```toml
+# the tool package
+[features.codegen]
+tools = ["codegen"]
+
+[targets.codegen]
+kind = "bin"
+main = "src/codegen.cpp"
+```
+
+```toml
+# the consumer
+[dependencies]
+toolpkg = { path = "../toolpkg", features = ["codegen"] }
+```
+
+Enabling the feature has the effect of `tools = ["codegen"]` on the edge: the
+program is built for the host and `mcpp::dep_bin("toolpkg", "codegen")` names
+it. A consumer that does not enable the feature builds nothing. An entry that
+names no `bin` target of the package is refused when the manifest loads, and the
+message lists the package's `bin` targets.
+
+### A dependency's program shipped with the consumer: `artifacts` (mcpp 2026.9.27.1+)
+
+`tools` builds a program for the machine that runs the build. A program that
+ships with the consumer and runs on its target (an updater, a helper process)
+is requested with `artifacts`:
+
+```toml
+[dependencies]
+updater = { path = "../updater", artifacts = ["updater"] }
+```
+
+- The dependency's `bin` target is built for the consumer's target and profile,
+  as a link unit of the consumer's plan, into the consumer's `bin/`. Under
+  `--target x86_64-linux-musl` it is a musl program.
+- None of the dependency's code is linked into the consumer through this edge.
+  A package also reached through an ordinary edge is linked as usual.
+- An action of the consumer's build program names the program with
+  `${mcpp.artifact:updater/updater}`, in its arguments and its inputs; a name
+  that matches no `artifacts` entry fails planning and names the placeholder.
+- `mcpp run` does not choose it, and `mcpp pack` stages it beside the
+  consumer's program.
+
 > The section has been parsed since early versions and, until 2026.8.29.1, read
 > by nothing that made a decision: writing it produced a manifest that loaded,
 > no diagnostic, and no effect.

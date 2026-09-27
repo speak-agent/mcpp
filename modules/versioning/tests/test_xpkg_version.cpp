@@ -57,3 +57,56 @@ TEST(XpkgVersion, NamesNeverWinAndBuildMetadataIsIgnored) {
     EXPECT_GT(xv::compare_keys("1.0.0", "nightly"), 0);
     EXPECT_EQ(best({"25.0.4+7"}, "25.0.4"), "25.0.4+7");
 }
+
+// THE SHARED STATEMENT. xlings publishes which version a request selects as
+// data (tests/data/semver-vectors.tsv in its repository), and this package
+// vendors the file at the xlings version mcpp pins. Every vector is run
+// through `select_installed`, the function `mcpp::xpkg_dir` answers with.
+// A vector whose `active` column names a version is skipped: the active
+// version is state xlings keeps, and mcpp selects among installed payload
+// directories, none of which is active.
+namespace {
+std::filesystem::path vectors_file() {
+    namespace fs = std::filesystem;
+    for (auto dir = fs::current_path();; dir = dir.parent_path()) {
+        for (auto rel : {"tests/data/semver-vectors.tsv",
+                         "modules/versioning/tests/data/semver-vectors.tsv"}) {
+            std::error_code ec;
+            if (fs::is_regular_file(dir / rel, ec)) return dir / rel;
+        }
+        if (dir == dir.parent_path()) return {};
+    }
+}
+
+std::vector<std::string> split(std::string_view s, char sep) {
+    std::vector<std::string> out;
+    for (std::size_t p = 0;;) {
+        const auto e = s.find(sep, p);
+        out.emplace_back(s.substr(p, e == std::string_view::npos ? e : e - p));
+        if (e == std::string_view::npos) return out;
+        p = e + 1;
+    }
+}
+}
+
+TEST(XpkgVersion, TheXlingsConformanceVectorsSelectTheSameVersion) {
+    const auto file = vectors_file();
+    ASSERT_FALSE(file.empty()) << "semver-vectors.tsv not found above "
+                               << std::filesystem::current_path();
+    std::ifstream in(file);
+    std::string line;
+    int lineNo = 0, checked = 0;
+    while (std::getline(in, line)) {
+        ++lineNo;
+        if (line.empty() || line.front() == '#') continue;
+        const auto col = split(line, '\t');
+        ASSERT_EQ(col.size(), 4u) << file << ":" << lineNo;
+        if (col[2] != "-") continue;
+        const auto available = split(col[1], ',');
+        const auto request = col[0] == "-" ? std::string{} : col[0];
+        EXPECT_EQ(xv::select_installed(available, request).value_or("none"), col[3])
+            << file << ":" << lineNo << ": request '" << col[0] << "' among " << col[1];
+        ++checked;
+    }
+    EXPECT_GT(checked, 0);
+}

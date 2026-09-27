@@ -1780,6 +1780,7 @@ kind = "bin"
 |---|---|---|
 | Source files | `src/**/*.{cppm,cpp,cc,c,S,s,asm}` | Scanned recursively and automatically |
 | Entry point | `src/main.cpp` | If this file exists, a `bin` target is inferred |
+| Library target | a module interface under `src/` | Inferred when no `[targets]` table and no `src/main.cpp` exist; `[build] sources = []` states that the default build compiles nothing and infers no library (2026.9.27.1+) |
 | Library root | `src/<pkg-tail>.cppm` | Override with `[lib].path` |
 | C++ standard | `c++23` | Configure with `[package].standard`; supports `c++20` / `c++26` / `c++2a` / `c++2c` / `gnu++NN` / `c++latest` / `c++fly` (experimental playground) |
 | C standard | `c11` | `.c` files go through the C compiler automatically |
